@@ -78,6 +78,15 @@
   .cat.sel .nm{color:var(--text)}
   .cat:active{transform:scale(.96)}
 
+  .acct-block{display:flex;align-items:center;gap:10px;margin:6px 0 14px;flex-wrap:wrap}
+  .acct-lbl{color:var(--muted);font-size:13px}
+  .accts{display:flex;gap:8px;flex-wrap:wrap}
+  .acct{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;transition:.12s}
+  .acct .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .acct.sel{color:var(--text);background:var(--surface-2)}
+  .acct:active{transform:scale(.97)}
+  .stat-sub{color:var(--muted);font-size:13px;font-weight:600;margin:22px 0 12px;text-transform:uppercase;letter-spacing:.03em}
+
   .note-row{display:flex;gap:8px;margin:4px 0 14px}
   .note-row input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;outline:none}
   .note-row input[type=text]:focus{border-color:var(--gold)}
@@ -181,12 +190,13 @@
     .head h1{font-size:28px}
 
     /* Add: two columns */
-    #s-add.active{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;align-items:start;grid-template-areas:"head head" "type type" "amt cats" "note cats" "date cats" "save cats"}
+    #s-add.active{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;align-items:start;grid-template-areas:"head head" "type type" "amt cats" "acct cats" "note cats" "date cats" "save cats"}
     #s-add .head{grid-area:head}
     #s-add .toggle{grid-area:type;max-width:360px}
     #s-add .amount-box{grid-area:amt;background:var(--surface);border:1px solid var(--line);padding:26px 0 6px;margin-top:4px}
     #s-add .amount-box .val{font-size:56px}
     #s-add .amount-hint{display:block}
+    #s-add .acct-block{grid-area:acct}
     #s-add .cats{grid-area:cats;grid-template-columns:repeat(3,1fr);margin:8px 0 0}
     #s-add .note-row{grid-area:note}
     #s-add .date-row{grid-area:date}
@@ -197,6 +207,7 @@
     .cat .emo{font-size:24px}
     .cat .nm{font-size:12px}
     .cat:hover{border-color:var(--muted)}
+    .acct:hover{border-color:var(--muted);color:var(--text)}
 
     .summary .card{padding:16px 18px}
     .summary .card .amt{font-size:24px}
@@ -253,6 +264,7 @@
         <div class="val zero" id="amountVal">0 <span class="cur">₸</span></div>
         <div class="amount-hint">Наберите сумму на клавиатуре · Enter — сохранить</div>
       </div>
+      <div class="acct-block"><span class="acct-lbl">Счёт</span><div class="accts" id="acctRow"></div></div>
       <div class="cats" id="catGrid"></div>
       <div class="note-row">
         <input type="text" id="noteInput" placeholder="Комментарий (необязательно)" maxlength="60">
@@ -287,6 +299,7 @@
       <div class="head"><h1>Отчёт</h1><div class="sub" id="statMonth"></div></div>
       <div class="stat-total"><div class="lbl">Потрачено за месяц</div><div class="amt num" id="statTotal">0 ₸</div></div>
       <div id="statBars"></div>
+      <div id="statAccts"></div>
     </section>
 
     <!-- ===== MORE ===== -->
@@ -319,6 +332,8 @@
     expense:[
       {id:"food",emo:"🛒",nm:"Продукты",c:"#E5695B"},
       {id:"cafe",emo:"🍽️",nm:"Кафе",c:"#E08A5E"},
+      {id:"lunch",emo:"🍱",nm:"Обед",c:"#E0975E"},
+      {id:"snack",emo:"🍫",nm:"Вкусняшки",c:"#D98BC9"},
       {id:"trans",emo:"🚗",nm:"Транспорт",c:"#E0B15E"},
       {id:"home",emo:"🏠",nm:"Жильё",c:"#9BCB6B"},
       {id:"util",emo:"💡",nm:"Комуналка",c:"#5EC0B4"},
@@ -339,8 +354,15 @@
   };
   function catById(type,id){var a=CATS[type]||[];for(var i=0;i<a.length;i++)if(a[i].id===id)return a[i];return {emo:"❓",nm:"—",c:"#8A929E"};}
 
+  var ACCOUNTS=[
+    {id:"kaspi",nm:"Kaspi",c:"#F14635"},
+    {id:"cash",nm:"Наличные",c:"#4FB477"},
+    {id:"card",nm:"Карта",c:"#5E9CE0"}
+  ];
+  function acctById(id){for(var i=0;i<ACCOUNTS.length;i++)if(ACCOUNTS[i].id===id)return ACCOUNTS[i];return null;}
+
   var txs=load();
-  var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr()};
+  var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr(),account:"kaspi"};
   var viewMonth=new Date();viewMonth.setDate(1);
 
   function todayStr(){var d=new Date();return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());}
@@ -379,6 +401,18 @@
     amountBox.className="amount-box "+(draft.type==="expense"?"exp":"inc");
   }
   function updateSave(){saveBtn.disabled=!(draft.amount>0&&draft.cat);}
+
+  var acctRow=document.getElementById("acctRow");
+  function renderAccts(){
+    acctRow.innerHTML="";
+    ACCOUNTS.forEach(function(a){
+      var b=document.createElement("button");
+      b.className="acct"+(draft.account===a.id?" sel":"");
+      b.innerHTML='<span class="dot" style="background:'+a.c+'"></span>'+a.nm;
+      b.onclick=function(){draft.account=a.id;renderAccts();};
+      acctRow.appendChild(b);
+    });
+  }
 
   var toggle=document.getElementById("typeToggle");
   toggle.querySelectorAll("button").forEach(function(b){
@@ -419,7 +453,7 @@
 
   saveBtn.onclick=function(){
     if(saveBtn.disabled)return;
-    txs.push({id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date});
+    txs.push({id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account});
     save();
     toast(draft.type==="expense"?"Расход добавлен":"Доход добавлен");
     draft.amount=0;draft.note="";draft.cat=null;noteInput.value="";
@@ -447,7 +481,9 @@
       html+='<div class="day-group"><div class="day-head"><span>'+p2(d.getDate())+" "+MONTHS[d.getMonth()].toLowerCase().slice(0,3)+", "+WD[d.getDay()]+'</span><span class="num">'+(dt<0?"−":"+")+fmt(Math.abs(dt))+' ₸</span></div>';
       groups[day].forEach(function(t){
         var c=catById(t.type,t.cat);
-        html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div>'+(t.note?'<div class="n">'+escapeHtml(t.note)+'</div>':'')+'</div><div class="a '+(t.type==="expense"?"e":"i")+' num">'+(t.type==="expense"?"−":"+")+fmt(t.amount)+' ₸</div></div>';
+        var ac=acctById(t.account);
+        var sub=[];if(ac)sub.push(ac.nm);if(t.note)sub.push(escapeHtml(t.note));
+        html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div>'+(sub.length?'<div class="n">'+sub.join(" · ")+'</div>':'')+'</div><div class="a '+(t.type==="expense"?"e":"i")+' num">'+(t.type==="expense"?"−":"+")+fmt(t.amount)+' ₸</div></div>';
       });
       html+='</div>';
     });
@@ -463,13 +499,14 @@
   var statMonth=document.getElementById("statMonth");
   var statTotal=document.getElementById("statTotal");
   var statBars=document.getElementById("statBars");
+  var statAccts=document.getElementById("statAccts");
   function renderStats(){
     statMonth.textContent=MONTHS[viewMonth.getMonth()]+" "+viewMonth.getFullYear();
     var list=txs.filter(function(t){return t.type==="expense"&&inViewMonth(t);});
-    var total=0,byCat={};
-    list.forEach(function(t){total+=t.amount;byCat[t.cat]=(byCat[t.cat]||0)+t.amount;});
+    var total=0,byCat={},byAcct={};
+    list.forEach(function(t){total+=t.amount;byCat[t.cat]=(byCat[t.cat]||0)+t.amount;var ak=t.account||"other_a";byAcct[ak]=(byAcct[ak]||0)+t.amount;});
     statTotal.textContent=money(total);
-    if(!total){statBars.innerHTML='<div class="empty"><div class="big">📊</div>Нет расходов за этот месяц</div>';return;}
+    if(!total){statBars.innerHTML='<div class="empty"><div class="big">📊</div>Нет расходов за этот месяц</div>';statAccts.innerHTML="";return;}
     var rows=Object.keys(byCat).map(function(id){return {id:id,sum:byCat[id]};}).sort(function(a,b){return b.sum-a.sum;});
     var html="";
     rows.forEach(function(r){
@@ -477,6 +514,14 @@
       html+='<div class="bar-row"><div class="top"><span class="l">'+c.emo+' '+c.nm+'<span class="pct">'+pct+'%</span></span><span class="num">'+money(r.sum)+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+c.c+'"></div></div></div>';
     });
     statBars.innerHTML=html;
+    // by account
+    var arows=Object.keys(byAcct).map(function(id){return {id:id,sum:byAcct[id]};}).sort(function(a,b){return b.sum-a.sum;});
+    var ahtml='<div class="stat-sub">Способы оплаты</div>';
+    arows.forEach(function(r){
+      var a=acctById(r.id)||{nm:"Другое",c:"#8A929E"};var pct=Math.round(r.sum/total*100);
+      ahtml+='<div class="bar-row"><div class="top"><span class="l">'+a.nm+'<span class="pct">'+pct+'%</span></span><span class="num">'+money(r.sum)+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+a.c+'"></div></div></div>';
+    });
+    statAccts.innerHTML=ahtml;
   }
 
   // more
@@ -519,7 +564,7 @@
   });
   function refreshAll(){renderHistory();renderStats();renderMore();}
 
-  renderCats();renderAmount();updateSave();
+  renderCats();renderAccts();renderAmount();updateSave();
 })();
 </script>
 </body>
