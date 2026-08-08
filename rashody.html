@@ -144,6 +144,7 @@
   .tx .a{font-size:16px;font-weight:700;white-space:nowrap}
   .tx .a.e{color:var(--expense)}
   .tx .a.i{color:var(--income)}
+  .tx .a.tr{color:#5EBFA0}
   .empty{text-align:center;color:var(--muted);padding:50px 20px;font-size:15px}
   .empty .big{font-size:40px;margin-bottom:10px}
 
@@ -343,6 +344,12 @@
       <div class="head"><h1>Ещё</h1><div class="sub">Данные и бэкап</div></div>
       <div class="set-group">
         <div class="set-item">
+          <div class="l"><div class="t">Подушка на депозите</div><div class="d">Всего отложено минус снято</div></div>
+          <div class="num" id="depBalance" style="font-size:17px;font-weight:700;color:#5EBFA0">0 ₸</div>
+        </div>
+      </div>
+      <div class="set-group">
+        <div class="set-item">
           <div class="l"><div class="t">Синхронизация</div><div class="d" id="syncInfo">—</div></div>
           <button id="syncBtn">Обновить</button>
         </div>
@@ -523,6 +530,7 @@
       {id:"salary",emo:"💰",nm:"Зарплата",c:"#4FB477"},
       {id:"bonus",emo:"⭐",nm:"Премия",c:"#6BCB86"},
       {id:"side",emo:"💵",nm:"Подработка",c:"#8ED6A0"},
+      {id:"dep_out",emo:"🏧",nm:"Из депозита",c:"#5EBFA0"},
       {id:"gift_i",emo:"🎁",nm:"Подарок",c:"#5EC0B4"},
       {id:"other_i",emo:"📥",nm:"Прочее",c:"#8A929E"}
     ]
@@ -535,6 +543,9 @@
     {id:"card",nm:"Карта",c:"#5E9CE0"}
   ];
   function acctById(id){for(var i=0;i<ACCOUNTS.length;i++)if(ACCOUNTS[i].id===id)return ACCOUNTS[i];return null;}
+
+  // переводы между кошельком и депозитом — не доход и не расход
+  function isTransfer(t){return t.cat==="deposit"||t.cat==="dep_out";}
 
   var txs=load();
   var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr(),account:"kaspi"};
@@ -647,21 +658,31 @@
   function renderHistory(){
     curMonth.textContent=MONTHS[viewMonth.getMonth()]+" "+viewMonth.getFullYear();
     var list=txs.filter(inViewMonth).sort(function(a,b){return a.date<b.date?1:(a.date>b.date?-1:0);});
-    var e=0,i=0,dep=0;list.forEach(function(t){if(t.type==="expense"){e+=t.amount;if(t.cat==="deposit")dep+=t.amount;}else i+=t.amount;});
-    sumExp.textContent=money(e);sumInc.textContent=money(i);sumDep.textContent=money(dep);
+    var e=0,i=0,depIn=0,depOut=0;
+    list.forEach(function(t){
+      if(t.cat==="deposit"){depIn+=t.amount;return;}
+      if(t.cat==="dep_out"){depOut+=t.amount;return;}
+      if(t.type==="expense")e+=t.amount;else i+=t.amount;
+    });
+    var depNet=depIn-depOut;
+    sumExp.textContent=money(e);sumInc.textContent=money(i);
+    sumDep.textContent=(depNet>0?"+":depNet<0?"−":"")+fmt(Math.abs(depNet))+" ₸";
+    sumDep.style.color=depNet<0?"var(--expense)":"#5EBFA0";
     if(!list.length){txList.innerHTML='<div class="empty"><div class="big">🗓️</div>Нет операций за этот месяц</div>';return;}
     var groups={},order=[];
     list.forEach(function(t){if(!groups[t.date]){groups[t.date]=[];order.push(t.date);}groups[t.date].push(t);});
     var html="";
     order.forEach(function(day){
       var d=new Date(day+"T00:00:00");var dt=0;
-      groups[day].forEach(function(t){dt+=t.type==="expense"?-t.amount:t.amount;});
+      groups[day].forEach(function(t){if(isTransfer(t))return;dt+=t.type==="expense"?-t.amount:t.amount;});
       html+='<div class="day-group"><div class="day-head"><span>'+p2(d.getDate())+" "+MONTHS[d.getMonth()].toLowerCase().slice(0,3)+", "+WD[d.getDay()]+'</span><span class="num">'+(dt<0?"−":"+")+fmt(Math.abs(dt))+' ₸</span></div>';
       groups[day].forEach(function(t){
         var c=catById(t.type,t.cat);
         var ac=acctById(t.account);
         var sub=[];if(ac)sub.push(ac.nm);if(t.note)sub.push(escapeHtml(t.note));
-        html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div>'+(sub.length?'<div class="n">'+sub.join(" · ")+'</div>':'')+'</div><div class="a '+(t.type==="expense"?"e":"i")+' num">'+(t.type==="expense"?"−":"+")+fmt(t.amount)+' ₸</div></div>';
+        var cls=isTransfer(t)?"tr":(t.type==="expense"?"e":"i");
+        var sign=isTransfer(t)?(t.cat==="deposit"?"→":"←"):(t.type==="expense"?"−":"+");
+        html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div>'+(sub.length?'<div class="n">'+sub.join(" · ")+'</div>':'')+'</div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
       });
       html+='</div>';
     });
@@ -680,7 +701,7 @@
   var statAccts=document.getElementById("statAccts");
   function renderStats(){
     statMonth.textContent=MONTHS[viewMonth.getMonth()]+" "+viewMonth.getFullYear();
-    var list=txs.filter(function(t){return t.type==="expense"&&inViewMonth(t);});
+    var list=txs.filter(function(t){return t.type==="expense"&&!isTransfer(t)&&inViewMonth(t);});
     var total=0,byCat={},byAcct={};
     list.forEach(function(t){total+=t.amount;byCat[t.cat]=(byCat[t.cat]||0)+t.amount;var ak=t.account||"other_a";byAcct[ak]=(byAcct[ak]||0)+t.amount;});
     statTotal.textContent=money(total);
@@ -723,7 +744,17 @@
     if(confirm("Удалить ВСЕ операции? Это действие нельзя отменить.")){if(confirm("Точно удалить всё? Сначала лучше сделать экспорт.")){txs=[];save();refreshAll();toast("Все данные удалены");}}
   };
   function downloadBlob(blob,name){var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},100);}
-  function renderMore(){document.getElementById("txCount").textContent=txs.length+" оп.";}
+  function renderMore(){
+    document.getElementById("txCount").textContent=txs.length+" оп.";
+    var din=0,dout=0;
+    txs.forEach(function(t){
+      if(t.type==="expense"&&t.cat==="deposit")din+=t.amount;
+      if(t.type==="income"&&t.cat==="dep_out")dout+=t.amount;
+    });
+    var bal=din-dout;
+    var el=document.getElementById("depBalance");
+    if(el){el.textContent=money(bal);el.style.color=bal<0?"var(--expense)":"#5EBFA0";}
+  }
 
   // tabs
   var screens={add:"s-add",hist:"s-hist",stat:"s-stat",more:"s-more"};
