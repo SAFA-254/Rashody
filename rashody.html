@@ -87,6 +87,27 @@
   .acct:active{transform:scale(.97)}
   .stat-sub{color:var(--muted);font-size:13px;font-weight:600;margin:22px 0 12px;text-transform:uppercase;letter-spacing:.03em}
 
+  /* ---------- Login ---------- */
+  .login{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+  .login.hidden{display:none}
+  .login-card{width:100%;max-width:360px;text-align:center}
+  .login-logo{width:64px;height:64px;margin:0 auto 18px;border-radius:18px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:var(--gold)}
+  .login-card h2{margin:0;font-size:24px;font-weight:700;letter-spacing:-.02em}
+  .login-sub{color:var(--muted);font-size:13px;margin:8px 0 24px;line-height:1.5}
+  .login-card input{width:100%;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:14px 16px;outline:none;margin-bottom:10px}
+  .login-card input:focus{border-color:var(--gold)}
+  .login-card #loginBtn{width:100%;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;color:#12151C;background:var(--gold);margin-top:4px;transition:.12s}
+  .login-card #loginBtn:disabled{opacity:.5}
+  .login-err{color:var(--expense);font-size:13px;min-height:20px;margin-top:10px}
+  .login-offline{background:none;border:none;color:var(--muted);font-size:13px;text-decoration:underline;margin-top:6px;padding:8px}
+
+  /* sync badge */
+  .sync-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:6px}
+  .sync-badge .d{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .sync-badge.ok .d{background:var(--income)}
+  .sync-badge.off .d{background:var(--expense)}
+  .sync-badge.wait .d{background:var(--gold)}
+
   .note-row{display:flex;gap:8px;margin:4px 0 14px}
   .note-row input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;outline:none}
   .note-row input[type=text]:focus{border-color:var(--gold)}
@@ -106,10 +127,11 @@
   .month-nav button{background:var(--surface);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:18px;transition:.12s}
   .month-nav .m{font-size:16px;font-weight:600}
   .summary{display:flex;gap:10px;margin-bottom:16px}
-  .summary .card{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .summary .card{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 12px}
   .summary .card .lbl{font-size:12px;color:var(--muted)}
-  .summary .card .amt{font-size:20px;font-weight:700;margin-top:3px}
+  .summary .card .amt{font-size:clamp(15px,4.6vw,20px);font-weight:700;margin-top:3px;white-space:nowrap}
   .summary .exp .amt{color:var(--expense)}
+  .summary .dep .amt{color:#5EBFA0}
   .summary .inc .amt{color:var(--income)}
 
   .day-group{margin-bottom:14px}
@@ -229,6 +251,19 @@
 </style>
 </head>
 <body>
+<div class="login" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">₸</div>
+    <h2>Расходы</h2>
+    <p class="login-sub">Войдите, чтобы данные синхронизировались между телефоном и компьютером</p>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Пароль" autocomplete="current-password">
+    <button id="loginBtn">Войти</button>
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-offline" id="offlineBtn">Работать без синхронизации</button>
+  </div>
+</div>
+
 <div id="app">
 
   <!-- ===== NAV (bottom on mobile / sidebar on desktop) ===== -->
@@ -289,6 +324,7 @@
       </div>
       <div class="summary">
         <div class="card exp"><div class="lbl">Расходы</div><div class="amt num" id="sumExp">0 ₸</div></div>
+        <div class="card dep"><div class="lbl">Депозит</div><div class="amt num" id="sumDep">0 ₸</div></div>
         <div class="card inc"><div class="lbl">Доходы</div><div class="amt num" id="sumInc">0 ₸</div></div>
       </div>
       <div id="txList"></div>
@@ -305,6 +341,16 @@
     <!-- ===== MORE ===== -->
     <section id="s-more" class="screen">
       <div class="head"><h1>Ещё</h1><div class="sub">Данные и бэкап</div></div>
+      <div class="set-group">
+        <div class="set-item">
+          <div class="l"><div class="t">Синхронизация</div><div class="d" id="syncInfo">—</div></div>
+          <button id="syncBtn">Обновить</button>
+        </div>
+        <div class="set-item">
+          <div class="l"><div class="t">Аккаунт</div><div class="d" id="acctInfo">Не выполнен вход</div></div>
+          <button id="logoutBtn">Выйти</button>
+        </div>
+      </div>
       <div class="set-group">
         <div class="set-item"><div class="l"><div class="t">Экспорт в файл</div><div class="d">Сохранить резервную копию (JSON)</div></div><button id="exportBtn">Скачать</button></div>
         <div class="set-item"><div class="l"><div class="t">Экспорт в CSV</div><div class="d">Для Excel / таблиц</div></div><button id="csvBtn">Скачать</button></div>
@@ -325,6 +371,133 @@
 (function(){
   "use strict";
   var KEY="rashody_v1";
+
+  /* ================= SUPABASE ================= */
+  var SB_URL="https://ihqdsemaymyhobphcyju.supabase.co";
+  var SB_KEY="sb_publishable_7nK1vQrlmzz-_Tb9J0g0TQ_wcS0LrxF";
+  var SESS_KEY="rashody_sess";
+  var QUEUE_KEY="rashody_queue";
+  var session=null, syncMode="off"; // off | ok | wait
+
+  function loadSess(){try{var r=localStorage.getItem(SESS_KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
+  function saveSess(s){try{s?localStorage.setItem(SESS_KEY,JSON.stringify(s)):localStorage.removeItem(SESS_KEY);}catch(e){}}
+  function loadQueue(){try{var r=localStorage.getItem(QUEUE_KEY);return r?JSON.parse(r):[];}catch(e){return [];}}
+  function saveQueue(q){try{localStorage.setItem(QUEUE_KEY,JSON.stringify(q));}catch(e){}}
+
+  function sbFetch(path,opts){
+    opts=opts||{};
+    var h=opts.headers||{};
+    h["apikey"]=SB_KEY;
+    h["Content-Type"]="application/json";
+    if(session&&session.access_token)h["Authorization"]="Bearer "+session.access_token;
+    opts.headers=h;
+    return fetch(SB_URL+path,opts);
+  }
+
+  function sbLogin(email,pass){
+    return fetch(SB_URL+"/auth/v1/token?grant_type=password",{
+      method:"POST",
+      headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({email:email,password:pass})
+    }).then(function(r){return r.json().then(function(j){
+      if(!r.ok)throw new Error(j.error_description||j.msg||j.message||"Не удалось войти");
+      return j;
+    });});
+  }
+
+  function sbRefresh(){
+    if(!session||!session.refresh_token)return Promise.reject(new Error("no session"));
+    return fetch(SB_URL+"/auth/v1/token?grant_type=refresh_token",{
+      method:"POST",
+      headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({refresh_token:session.refresh_token})
+    }).then(function(r){return r.json();}).then(function(j){
+      if(j.access_token){session=j;saveSess(session);return j;}
+      throw new Error("refresh failed");
+    });
+  }
+
+  // retry wrapper: refresh token once on 401
+  function sbCall(path,opts){
+    return sbFetch(path,opts).then(function(r){
+      if(r.status===401){return sbRefresh().then(function(){return sbFetch(path,opts);});}
+      return r;
+    });
+  }
+
+  function setSync(mode,text){
+    syncMode=mode;
+    var i=document.getElementById("syncInfo");
+    if(i)i.textContent=text||(mode==="ok"?"Включена":mode==="wait"?"Ожидает сети":"Выключена");
+  }
+
+  // push one record (upsert)
+  function pushTx(t){
+    var row={id:t.id,type:t.type,amount:t.amount,cat:t.cat,account:t.account||null,note:t.note||"",date:t.date};
+    return sbCall("/rest/v1/transactions",{
+      method:"POST",
+      headers:{"Prefer":"resolution=merge-duplicates"},
+      body:JSON.stringify(row)
+    }).then(function(r){if(!r.ok)throw new Error("push failed");return true;});
+  }
+  function deleteTx(id){
+    return sbCall("/rest/v1/transactions?id=eq."+encodeURIComponent(id),{method:"DELETE"})
+      .then(function(r){if(!r.ok)throw new Error("delete failed");return true;});
+  }
+
+  // queue for offline
+  function enqueue(op,payload){
+    var q=loadQueue();q.push({op:op,payload:payload});saveQueue(q);
+    setSync("wait","Ожидает сети · "+q.length+" в очереди");
+  }
+  function flushQueue(){
+    if(!session)return Promise.resolve();
+    var q=loadQueue();
+    if(!q.length)return Promise.resolve();
+    var chain=Promise.resolve();
+    q.forEach(function(item){
+      chain=chain.then(function(){
+        return item.op==="del"?deleteTx(item.payload):pushTx(item.payload);
+      });
+    });
+    return chain.then(function(){saveQueue([]);setSync("ok");})
+                .catch(function(){setSync("wait","Ожидает сети · "+loadQueue().length+" в очереди");});
+  }
+
+  // pull all from cloud and merge
+  function pullAll(){
+    if(!session)return Promise.resolve();
+    return sbCall("/rest/v1/transactions?select=*",{method:"GET"})
+      .then(function(r){if(!r.ok)throw new Error("pull failed");return r.json();})
+      .then(function(rows){
+        if(!Array.isArray(rows))return;
+        var remote=rows.map(function(r){
+          return {id:r.id,type:r.type,amount:Number(r.amount),cat:r.cat,account:r.account||"kaspi",note:r.note||"",date:r.date};
+        });
+        var byId={};
+        remote.forEach(function(t){byId[t.id]=t;});
+        var localOnly=[];
+        txs.forEach(function(t){if(!byId[t.id]){byId[t.id]=t;localOnly.push(t);}});
+        txs=Object.keys(byId).map(function(k){return byId[k];});
+        save();
+        // upload the ones cloud didn't have
+        var chain=Promise.resolve();
+        localOnly.forEach(function(t){chain=chain.then(function(){return pushTx(t);});});
+        return chain;
+      })
+      .then(function(){setSync("ok");refreshAll();})
+      .catch(function(){setSync("wait","Нет связи с облаком");});
+  }
+
+  function afterLogin(){
+    document.getElementById("loginScreen").classList.add("hidden");
+    var a=document.getElementById("acctInfo");
+    if(a&&session&&session.user)a.textContent=session.user.email;
+    setSync("ok");
+    flushQueue().then(pullAll);
+  }
+  /* ============ END SUPABASE ============ */
+
   function load(){ try{var r=localStorage.getItem(KEY);return r?JSON.parse(r):[];}catch(e){return window.__mem||[];} }
   function save(){ try{localStorage.setItem(KEY,JSON.stringify(txs));}catch(e){window.__mem=txs;} }
 
@@ -339,6 +512,7 @@
       {id:"util",emo:"💡",nm:"Комуналка",c:"#5EC0B4"},
       {id:"conn",emo:"📱",nm:"Связь",c:"#5E9CE0"},
       {id:"install",emo:"🗓️",nm:"Рассрочка",c:"#7E86E0"},
+      {id:"deposit",emo:"🏦",nm:"Депозит",c:"#5EBFA0"},
       {id:"cloth",emo:"👕",nm:"Одежда",c:"#8E7EE0"},
       {id:"health",emo:"💊",nm:"Здоровье",c:"#D67EC0"},
       {id:"fun",emo:"🎮",nm:"Досуг",c:"#E07E9C"},
@@ -454,8 +628,10 @@
 
   saveBtn.onclick=function(){
     if(saveBtn.disabled)return;
-    txs.push({id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account});
+    var newTx={id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account};
+    txs.push(newTx);
     save();
+    if(session){pushTx(newTx).then(function(){setSync("ok");}).catch(function(){enqueue("put",newTx);});}
     toast(draft.type==="expense"?"Расход добавлен":"Доход добавлен");
     draft.amount=0;draft.note="";draft.cat=null;noteInput.value="";
     renderCats();renderAmount();updateSave();
@@ -466,12 +642,13 @@
   var txList=document.getElementById("txList");
   var sumExp=document.getElementById("sumExp");
   var sumInc=document.getElementById("sumInc");
+  var sumDep=document.getElementById("sumDep");
   function inViewMonth(t){var d=new Date(t.date+"T00:00:00");return d.getMonth()===viewMonth.getMonth()&&d.getFullYear()===viewMonth.getFullYear();}
   function renderHistory(){
     curMonth.textContent=MONTHS[viewMonth.getMonth()]+" "+viewMonth.getFullYear();
     var list=txs.filter(inViewMonth).sort(function(a,b){return a.date<b.date?1:(a.date>b.date?-1:0);});
-    var e=0,i=0;list.forEach(function(t){if(t.type==="expense")e+=t.amount;else i+=t.amount;});
-    sumExp.textContent=money(e);sumInc.textContent=money(i);
+    var e=0,i=0,dep=0;list.forEach(function(t){if(t.type==="expense"){e+=t.amount;if(t.cat==="deposit")dep+=t.amount;}else i+=t.amount;});
+    sumExp.textContent=money(e);sumInc.textContent=money(i);sumDep.textContent=money(dep);
     if(!list.length){txList.innerHTML='<div class="empty"><div class="big">🗓️</div>Нет операций за этот месяц</div>';return;}
     var groups={},order=[];
     list.forEach(function(t){if(!groups[t.date]){groups[t.date]=[];order.push(t.date);}groups[t.date].push(t);});
@@ -490,7 +667,7 @@
     });
     txList.innerHTML=html;
     txList.querySelectorAll(".tx").forEach(function(el){
-      el.onclick=function(){var id=el.dataset.id;if(confirm("Удалить эту операцию?")){txs=txs.filter(function(x){return x.id!==id;});save();renderHistory();toast("Удалено");}};
+      el.onclick=function(){var id=el.dataset.id;if(confirm("Удалить эту операцию?")){txs=txs.filter(function(x){return x.id!==id;});save();if(session){deleteTx(id).catch(function(){enqueue("del",id);});}renderHistory();toast("Удалено");}};
     });
   }
   document.getElementById("prevM").onclick=function(){viewMonth.setMonth(viewMonth.getMonth()-1);renderHistory();};
@@ -566,6 +743,67 @@
   function refreshAll(){renderHistory();renderStats();renderMore();}
 
   renderCats();renderAccts();renderAmount();updateSave();
+
+  /* ---------- login wiring ---------- */
+  var loginScreen=document.getElementById("loginScreen");
+  var loginBtn=document.getElementById("loginBtn");
+  var loginErr=document.getElementById("loginErr");
+  var emailIn=document.getElementById("loginEmail");
+  var passIn=document.getElementById("loginPass");
+
+  function doLogin(){
+    var em=emailIn.value.trim(),pw=passIn.value;
+    if(!em||!pw){loginErr.textContent="Введите email и пароль";return;}
+    loginBtn.disabled=true;loginBtn.textContent="Вход…";loginErr.textContent="";
+    sbLogin(em,pw).then(function(j){
+      session=j;saveSess(session);
+      loginBtn.disabled=false;loginBtn.textContent="Войти";
+      passIn.value="";
+      afterLogin();
+    }).catch(function(err){
+      loginBtn.disabled=false;loginBtn.textContent="Войти";
+      loginErr.textContent=(""+err.message).indexOf("credential")>=0?"Неверный email или пароль":err.message;
+    });
+  }
+  loginBtn.onclick=doLogin;
+  passIn.onkeydown=function(e){if(e.key==="Enter")doLogin();};
+  emailIn.onkeydown=function(e){if(e.key==="Enter")passIn.focus();};
+
+  document.getElementById("offlineBtn").onclick=function(){
+    loginScreen.classList.add("hidden");
+    setSync("off","Выключена — данные только на этом устройстве");
+    refreshAll();
+  };
+
+  document.getElementById("syncBtn").onclick=function(){
+    if(!session){toast("Сначала войдите");loginScreen.classList.remove("hidden");return;}
+    toast("Синхронизация…");
+    flushQueue().then(pullAll).then(function(){toast("Готово");});
+  };
+  document.getElementById("logoutBtn").onclick=function(){
+    if(!session){loginScreen.classList.remove("hidden");return;}
+    if(confirm("Выйти из аккаунта? Записи останутся на этом устройстве.")){
+      session=null;saveSess(null);
+      document.getElementById("acctInfo").textContent="Не выполнен вход";
+      setSync("off");
+      loginScreen.classList.remove("hidden");
+    }
+  };
+
+  // auto-flush when connection returns
+  window.addEventListener("online",function(){if(session)flushQueue().then(pullAll);});
+
+  /* ---------- startup ---------- */
+  session=loadSess();
+  if(session){
+    loginScreen.classList.add("hidden");
+    var ai=document.getElementById("acctInfo");
+    if(ai&&session.user)ai.textContent=session.user.email;
+    setSync("ok");
+    flushQueue().then(pullAll);
+  }else{
+    setSync("off");
+  }
 })();
 </script>
 </body>
