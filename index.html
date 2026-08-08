@@ -118,6 +118,27 @@
   .recent-head{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:0 0 12px}
   .recent-empty{color:var(--muted);font-size:14px;padding:18px 0}
 
+  /* ---------- Edit modal ---------- */
+  .modal{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;padding:0}
+  .modal.open{display:flex}
+  .modal-card{width:100%;max-width:520px;max-height:92vh;overflow-y:auto;background:var(--bg);border:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px 16px calc(20px + var(--safe-b));animation:slideup .2s ease}
+  @keyframes slideup{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion:reduce){.modal-card{animation:none}}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;font-size:17px;font-weight:700;margin-bottom:14px}
+  .modal-x{background:var(--surface);border:1px solid var(--line);border-radius:10px;width:34px;height:34px;font-size:15px;color:var(--muted)}
+  .fld-lbl{display:block;font-size:12px;color:var(--muted);margin:14px 0 6px}
+  .fld{width:100%;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:13px 14px;outline:none;color-scheme:dark}
+  .fld:focus{border-color:var(--gold)}
+  .modal-cats{grid-template-columns:repeat(4,1fr);margin:0}
+  .modal-actions{display:flex;gap:10px;margin-top:22px}
+  .modal-del{flex:0 0 40%;background:var(--surface);border:1px solid #4a2b2b;color:var(--expense);border-radius:13px;padding:14px;font-size:15px;font-weight:600}
+  .modal-save{flex:1;background:var(--gold);border:none;color:#12151C;border-radius:13px;padding:14px;font-size:16px;font-weight:700}
+  @media (min-width:768px){
+    .modal{align-items:center;padding:24px}
+    .modal-card{border-radius:20px;padding:22px 22px 24px;max-height:86vh}
+    .modal-cats{grid-template-columns:repeat(5,1fr)}
+  }
+
   .note-row{display:flex;gap:8px;margin:4px 0 14px}
   .note-row input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;outline:none}
   .note-row input[type=text]:focus{border-color:var(--gold)}
@@ -418,6 +439,33 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="modal" id="editModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <span>Изменить запись</span>
+      <button class="modal-x" id="editClose">✕</button>
+    </div>
+    <div class="toggle" id="editToggle">
+      <button data-type="expense" class="on-exp">Расход</button>
+      <button data-type="income">Доход</button>
+    </div>
+    <label class="fld-lbl">Сумма</label>
+    <input type="number" id="editAmount" inputmode="numeric" class="fld">
+    <label class="fld-lbl">Категория</label>
+    <div class="cats modal-cats" id="editCats"></div>
+    <label class="fld-lbl">Счёт</label>
+    <div class="accts" id="editAccts"></div>
+    <label class="fld-lbl">Комментарий</label>
+    <input type="text" id="editNote" class="fld" maxlength="60" placeholder="Необязательно">
+    <label class="fld-lbl">Дата</label>
+    <input type="date" id="editDate" class="fld">
+    <div class="modal-actions">
+      <button class="modal-del" id="editDelete">Удалить</button>
+      <button class="modal-save" id="editSave">Сохранить</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -733,7 +781,7 @@
     });
     txList.innerHTML=html;
     txList.querySelectorAll(".tx").forEach(function(el){
-      el.onclick=function(){var id=el.dataset.id;if(confirm("Удалить эту операцию?")){txs=txs.filter(function(x){return x.id!==id;});save();if(session){deleteTx(id).catch(function(){enqueue("del",id);});}renderHistory();renderDash();toast("Удалено");}};
+      el.onclick=function(){openEdit(el.dataset.id);};
     });
   }
   document.getElementById("prevM").onclick=function(){viewMonth.setMonth(viewMonth.getMonth()-1);renderHistory();};
@@ -861,10 +909,98 @@
       if(t.note)sub.push(escapeHtml(t.note));
       var cls=isTransfer(t)?"tr":(t.type==="expense"?"e":"i");
       var sign=isTransfer(t)?(t.cat==="deposit"?"→":"←"):(t.type==="expense"?"−":"+");
-      html+='<div class="tx"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div><div class="n">'+sub.join(" · ")+'</div></div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
+      html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div><div class="n">'+sub.join(" · ")+'</div></div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
     });
     recentList.innerHTML=html;
+    recentList.querySelectorAll(".tx").forEach(function(el){
+      el.onclick=function(){openEdit(el.dataset.id);};
+    });
   }
+
+  /* ---------- edit modal ---------- */
+  var editModal=document.getElementById("editModal");
+  var editAmount=document.getElementById("editAmount");
+  var editNote=document.getElementById("editNote");
+  var editDate=document.getElementById("editDate");
+  var editCats=document.getElementById("editCats");
+  var editAccts=document.getElementById("editAccts");
+  var editToggle=document.getElementById("editToggle");
+  var edit={id:null,type:"expense",cat:null,account:"kaspi"};
+
+  function renderEditCats(){
+    editCats.innerHTML="";
+    CATS[edit.type].forEach(function(c){
+      var b=document.createElement("button");
+      b.className="cat"+(edit.cat===c.id?" sel":"");
+      b.innerHTML='<span class="emo">'+c.emo+'</span><span class="nm">'+c.nm+'</span>';
+      b.onclick=function(){edit.cat=c.id;renderEditCats();};
+      editCats.appendChild(b);
+    });
+  }
+  function renderEditAccts(){
+    editAccts.innerHTML="";
+    ACCOUNTS.forEach(function(a){
+      var b=document.createElement("button");
+      b.className="acct"+(edit.account===a.id?" sel":"");
+      b.innerHTML='<span class="dot" style="background:'+a.c+'"></span>'+a.nm;
+      b.onclick=function(){edit.account=a.id;renderEditAccts();};
+      editAccts.appendChild(b);
+    });
+  }
+  editToggle.querySelectorAll("button").forEach(function(b){
+    b.onclick=function(){
+      edit.type=b.dataset.type;edit.cat=null;
+      editToggle.querySelectorAll("button").forEach(function(x){x.className="";});
+      b.className=edit.type==="expense"?"on-exp":"on-inc";
+      renderEditCats();
+    };
+  });
+
+  function openEdit(id){
+    var t=null;
+    for(var i=0;i<txs.length;i++)if(txs[i].id===id){t=txs[i];break;}
+    if(!t)return;
+    edit.id=t.id;edit.type=t.type;edit.cat=t.cat;edit.account=t.account||"kaspi";
+    editAmount.value=t.amount;
+    editNote.value=t.note||"";
+    editDate.value=t.date;
+    editToggle.querySelectorAll("button").forEach(function(x){
+      x.className=(x.dataset.type===edit.type)?(edit.type==="expense"?"on-exp":"on-inc"):"";
+    });
+    renderEditCats();renderEditAccts();
+    editModal.classList.add("open");
+  }
+  function closeEdit(){editModal.classList.remove("open");edit.id=null;}
+
+  document.getElementById("editClose").onclick=closeEdit;
+  editModal.onclick=function(e){if(e.target===editModal)closeEdit();};
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&editModal.classList.contains("open"))closeEdit();});
+
+  document.getElementById("editSave").onclick=function(){
+    var amt=Math.round(Number(editAmount.value));
+    if(!(amt>0)){toast("Введите сумму");return;}
+    if(!edit.cat){toast("Выберите категорию");return;}
+    for(var i=0;i<txs.length;i++){
+      if(txs[i].id===edit.id){
+        txs[i].type=edit.type;txs[i].amount=amt;txs[i].cat=edit.cat;
+        txs[i].account=edit.account;txs[i].note=editNote.value.trim();
+        txs[i].date=editDate.value||txs[i].date;
+        var upd=txs[i];
+        save();
+        if(session){pushTx(upd).then(function(){setSync("ok");}).catch(function(){enqueue("put",upd);});}
+        break;
+      }
+    }
+    closeEdit();refreshAll();toast("Изменено");
+  };
+  document.getElementById("editDelete").onclick=function(){
+    if(!confirm("Удалить эту операцию?"))return;
+    var id=edit.id;
+    txs=txs.filter(function(x){return x.id!==id;});
+    save();
+    if(session){deleteTx(id).catch(function(){enqueue("del",id);});}
+    closeEdit();refreshAll();toast("Удалено");
+  };
 
   renderCats();renderAccts();renderAmount();updateSave();renderDash();
 
