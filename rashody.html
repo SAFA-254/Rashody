@@ -108,6 +108,16 @@
   .sync-badge.off .d{background:var(--expense)}
   .sync-badge.wait .d{background:var(--gold)}
 
+  /* ---------- Dashboard (desktop only) ---------- */
+  .dash-stats{display:none}
+  .recent{display:none}
+  .dash-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .dash-card .lbl{font-size:12px;color:var(--muted)}
+  .dash-card .amt{font-size:22px;font-weight:700;margin-top:4px}
+  .dash-card .meta{font-size:11px;color:var(--muted);margin-top:3px}
+  .recent-head{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:0 0 12px}
+  .recent-empty{color:var(--muted);font-size:14px;padding:18px 0}
+
   .note-row{display:flex;gap:8px;margin:4px 0 14px}
   .note-row input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;outline:none}
   .note-row input[type=text]:focus{border-color:var(--gold)}
@@ -208,13 +218,14 @@
     .tabbar button.active{background:var(--surface-2);color:var(--gold)}
 
     .content{padding:0 40px}
-    .screen{padding:0 0 60px;max-width:760px}
+    .screen{padding:0 0 60px;max-width:960px}
     .head{padding:34px 0 8px}
     .head h1{font-size:28px}
 
-    /* Add: two columns */
-    #s-add.active{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;align-items:start;grid-template-areas:"head head" "type type" "amt cats" "acct cats" "note cats" "date cats" "save cats"}
+    /* Add: dashboard layout */
+    #s-add.active{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;align-items:start;grid-template-areas:"head head" "stats stats" "type type" "amt cats" "acct cats" "note cats" "date cats" "save cats" "recent recent"}
     #s-add .head{grid-area:head}
+    #s-add .dash-stats{grid-area:stats;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0 18px}
     #s-add .toggle{grid-area:type;max-width:360px}
     #s-add .amount-box{grid-area:amt;background:var(--surface);border:1px solid var(--line);padding:26px 0 6px;margin-top:4px}
     #s-add .amount-box .val{font-size:56px}
@@ -231,6 +242,34 @@
     .cat .nm{font-size:12px}
     .cat:hover{border-color:var(--muted)}
     .acct:hover{border-color:var(--muted);color:var(--text)}
+
+    /* recent block */
+    #s-add .recent{grid-area:recent;display:block;margin-top:34px;padding-top:26px;border-top:1px solid var(--line)}
+    #s-add .recent #recentList{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+    #s-add .recent .tx{margin-bottom:0}
+
+    /* History: two columns of days */
+    #s-hist #txList{columns:2;column-gap:24px}
+    #s-hist .day-group{break-inside:avoid;page-break-inside:avoid}
+    #s-hist .month-nav{max-width:420px}
+
+    /* Report: side by side */
+    #s-stat.active{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;align-items:start;grid-template-areas:"head head" "total total" "bars accts"}
+    #s-stat .head{grid-area:head}
+    #s-stat .stat-total{grid-area:total}
+    #s-stat #statBars{grid-area:bars}
+    #s-stat #statAccts{grid-area:accts}
+    #s-stat #statAccts .stat-sub{margin-top:0}
+    #s-stat #statBars::before{content:"Категории";display:block;color:var(--muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:12px}
+
+    /* More: two columns */
+    #s-more.active{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;align-items:start;grid-template-areas:"head head" "g1 g2" "g3 g4" "note note"}
+    #s-more .head{grid-area:head}
+    #s-more .set-group:nth-of-type(1){grid-area:g1}
+    #s-more .set-group:nth-of-type(2){grid-area:g2}
+    #s-more .set-group:nth-of-type(3){grid-area:g3}
+    #s-more .set-group:nth-of-type(4){grid-area:g4}
+    #s-more .set-note{grid-area:note;max-width:560px}
 
     .summary .card{padding:16px 18px}
     .summary .card .amt{font-size:24px}
@@ -292,6 +331,7 @@
     <!-- ===== ADD ===== -->
     <section id="s-add" class="screen active">
       <div class="head"><h1>Добавить</h1><div class="sub" id="add-sub">Новая запись</div></div>
+      <div class="dash-stats" id="dashStats"></div>
       <div class="toggle" id="typeToggle">
         <button data-type="expense" class="on-exp">Расход</button>
         <button data-type="income">Доход</button>
@@ -313,6 +353,10 @@
         <button data-k="000">000</button><button>0</button><button class="del" data-k="del">⌫</button>
       </div>
       <button class="save-btn" id="saveBtn" disabled>Сохранить</button>
+      <div class="recent" id="recentBlock">
+        <div class="recent-head">Последние операции</div>
+        <div id="recentList"></div>
+      </div>
     </section>
 
     <!-- ===== HISTORY ===== -->
@@ -645,7 +689,7 @@
     if(session){pushTx(newTx).then(function(){setSync("ok");}).catch(function(){enqueue("put",newTx);});}
     toast(draft.type==="expense"?"Расход добавлен":"Доход добавлен");
     draft.amount=0;draft.note="";draft.cat=null;noteInput.value="";
-    renderCats();renderAmount();updateSave();
+    renderCats();renderAmount();updateSave();renderDash();
   };
 
   // history
@@ -688,7 +732,7 @@
     });
     txList.innerHTML=html;
     txList.querySelectorAll(".tx").forEach(function(el){
-      el.onclick=function(){var id=el.dataset.id;if(confirm("Удалить эту операцию?")){txs=txs.filter(function(x){return x.id!==id;});save();if(session){deleteTx(id).catch(function(){enqueue("del",id);});}renderHistory();toast("Удалено");}};
+      el.onclick=function(){var id=el.dataset.id;if(confirm("Удалить эту операцию?")){txs=txs.filter(function(x){return x.id!==id;});save();if(session){deleteTx(id).catch(function(){enqueue("del",id);});}renderHistory();renderDash();toast("Удалено");}};
     });
   }
   document.getElementById("prevM").onclick=function(){viewMonth.setMonth(viewMonth.getMonth()-1);renderHistory();};
@@ -765,15 +809,63 @@
       document.getElementById(screens[tab]).classList.add("active");
       document.querySelectorAll(".tabbar button").forEach(function(x){x.classList.remove("active");});
       b.classList.add("active");
+      if(tab==="add")renderDash();
       if(tab==="hist")renderHistory();
       if(tab==="stat")renderStats();
       if(tab==="more")renderMore();
       window.scrollTo(0,0);
     };
   });
-  function refreshAll(){renderHistory();renderStats();renderMore();}
+  function refreshAll(){renderHistory();renderStats();renderMore();renderDash();}
 
-  renderCats();renderAccts();renderAmount();updateSave();
+  /* ---------- dashboard on Add screen ---------- */
+  var dashStats=document.getElementById("dashStats");
+  var recentList=document.getElementById("recentList");
+  function renderDash(){
+    var now=new Date();
+    var mList=txs.filter(function(t){
+      var d=new Date(t.date+"T00:00:00");
+      return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    });
+    var e=0,i=0,dIn=0,dOut=0;
+    mList.forEach(function(t){
+      if(t.cat==="deposit"){dIn+=t.amount;return;}
+      if(t.cat==="dep_out"){dOut+=t.amount;return;}
+      if(t.type==="expense")e+=t.amount;else i+=t.amount;
+    });
+    // lifetime cushion
+    var bIn=0,bOut=0;
+    txs.forEach(function(t){
+      if(t.type==="expense"&&t.cat==="deposit")bIn+=t.amount;
+      if(t.type==="income"&&t.cat==="dep_out")bOut+=t.amount;
+    });
+    var cushion=bIn-bOut;
+    var net=i-e;
+    var mName=MONTHS[now.getMonth()];
+    dashStats.innerHTML=
+      '<div class="dash-card"><div class="lbl">Расходы · '+mName+'</div><div class="amt num" style="color:var(--expense)">'+money(e)+'</div><div class="meta">Доходы '+money(i)+'</div></div>'+
+      '<div class="dash-card"><div class="lbl">Остаток месяца</div><div class="amt num" style="color:'+(net<0?"var(--expense)":"var(--income)")+'">'+(net<0?"−":"+")+fmt(Math.abs(net))+' ₸</div><div class="meta">Доходы минус расходы</div></div>'+
+      '<div class="dash-card"><div class="lbl">Подушка</div><div class="amt num" style="color:'+(cushion<0?"var(--expense)":"#5EBFA0")+'">'+money(cushion)+'</div><div class="meta">'+(dIn-dOut>=0?"В этом месяце +":"В этом месяце −")+fmt(Math.abs(dIn-dOut))+' ₸</div></div>';
+
+    // recent list
+    var last=txs.slice().sort(function(a,b){return a.date<b.date?1:(a.date>b.date?-1:0);}).slice(0,6);
+    if(!last.length){recentList.innerHTML='<div class="recent-empty">Пока нет операций</div>';return;}
+    var html="";
+    last.forEach(function(t){
+      var c=catById(t.type,t.cat);
+      var ac=acctById(t.account);
+      var sub=[];if(ac)sub.push(ac.nm);
+      var d=new Date(t.date+"T00:00:00");
+      sub.push(p2(d.getDate())+" "+MONTHS[d.getMonth()].toLowerCase().slice(0,3));
+      if(t.note)sub.push(escapeHtml(t.note));
+      var cls=isTransfer(t)?"tr":(t.type==="expense"?"e":"i");
+      var sign=isTransfer(t)?(t.cat==="deposit"?"→":"←"):(t.type==="expense"?"−":"+");
+      html+='<div class="tx"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div><div class="n">'+sub.join(" · ")+'</div></div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
+    });
+    recentList.innerHTML=html;
+  }
+
+  renderCats();renderAccts();renderAmount();updateSave();renderDash();
 
   /* ---------- login wiring ---------- */
   var loginScreen=document.getElementById("loginScreen");
