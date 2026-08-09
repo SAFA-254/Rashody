@@ -142,6 +142,13 @@
     .modal-cats{grid-template-columns:repeat(5,1fr)}
   }
 
+  .debt-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);gap:12px}
+  .debt-row .who{font-size:14px;font-weight:600}
+  .debt-row .dir{font-size:11px;color:var(--muted);margin-top:2px}
+  .debt-row .sum{font-size:15px;font-weight:700;white-space:nowrap}
+  .debt-row .sum.owe{color:var(--expense)}
+  .debt-row .sum.owed{color:var(--income)}
+
   .note-row{display:flex;gap:8px;margin:4px 0 14px}
   .note-row input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 14px;outline:none}
   .note-row input[type=text]:focus{border-color:var(--gold)}
@@ -417,6 +424,12 @@
           <div class="num" id="depBalance" style="font-size:17px;font-weight:700;color:var(--transfer)">0 ₸</div>
         </div>
       </div>
+      <div class="set-group" id="debtGroup">
+        <div class="set-item">
+          <div class="l"><div class="t">Долги</div><div class="d" id="debtSummary">Нет активных долгов</div></div>
+        </div>
+        <div id="debtList"></div>
+      </div>
       <div class="set-group">
         <div class="set-item">
           <div class="l"><div class="t">Синхронизация</div><div class="d" id="syncInfo">—</div></div>
@@ -616,6 +629,8 @@
       {id:"conn",emo:"📱",nm:"Связь",c:"#6BB5F0"},
       {id:"install",emo:"🗓️",nm:"Рассрочка",c:"#8B7BE8"},
       {id:"deposit",emo:"🏦",nm:"Депозит",c:"#B98CFF"},
+      {id:"lend",emo:"🤝",nm:"Дал в долг",c:"#7BC5F0"},
+      {id:"debt_pay",emo:"📤",nm:"Вернул долг",c:"#6BA8E8"},
       {id:"cloth",emo:"👕",nm:"Одежда",c:"#A855D8"},
       {id:"health",emo:"💊",nm:"Здоровье",c:"#E86FB0"},
       {id:"fun",emo:"🎮",nm:"Досуг",c:"#C77DFF"},
@@ -627,6 +642,8 @@
       {id:"bonus",emo:"⭐",nm:"Премия",c:"#7BE8B8"},
       {id:"side",emo:"💵",nm:"Подработка",c:"#9BEDC9"},
       {id:"dep_out",emo:"🏧",nm:"Из депозита",c:"#B98CFF"},
+      {id:"lend_back",emo:"🙌",nm:"Вернули долг",c:"#7BC5F0"},
+      {id:"borrow",emo:"📥",nm:"Взял в долг",c:"#6BA8E8"},
       {id:"gift_i",emo:"🎁",nm:"Подарок",c:"#5ED9C4"},
       {id:"other_i",emo:"📥",nm:"Прочее",c:"#8B85A0"}
     ]
@@ -640,8 +657,10 @@
   ];
   function acctById(id){for(var i=0;i<ACCOUNTS.length;i++)if(ACCOUNTS[i].id===id)return ACCOUNTS[i];return null;}
 
-  // переводы между кошельком и депозитом — не доход и не расход
-  function isTransfer(t){return t.cat==="deposit"||t.cat==="dep_out";}
+  // переводы и долги — не доход и не расход
+  var TRANSFER_CATS=["deposit","dep_out","lend","lend_back","borrow","debt_pay"];
+  function isTransfer(t){return TRANSFER_CATS.indexOf(t.cat)>=0;}
+  function isDebt(t){return ["lend","lend_back","borrow","debt_pay"].indexOf(t.cat)>=0;}
 
   var txs=load();
   var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr(),account:"kaspi"};
@@ -672,9 +691,14 @@
       var d=document.createElement("button");
       d.className="cat"+(draft.cat===c.id?" sel":"");
       d.innerHTML='<span class="emo">'+c.emo+'</span><span class="nm">'+c.nm+'</span>';
-      d.onclick=function(){draft.cat=c.id;renderCats();updateSave();};
+      d.onclick=function(){draft.cat=c.id;renderCats();updateSave();updateNotePlaceholder();};
       catGrid.appendChild(d);
     });
+  }
+  function updateNotePlaceholder(){
+    var isD=["lend","lend_back","borrow","debt_pay"].indexOf(draft.cat)>=0;
+    noteInput.placeholder=isD?"Кому / от кого (обязательно)":"Комментарий (необязательно)";
+    noteInput.style.borderColor=isD&&!noteInput.value.trim()?"var(--gold)":"";
   }
   function renderAmount(){
     var z=draft.amount===0;
@@ -705,7 +729,7 @@
       addSub.textContent=draft.type==="expense"?"Новый расход":"Новый доход";
       saveBtn.style.background=draft.type==="expense"?"var(--grape)":"var(--income)";
       saveBtn.style.color=draft.type==="expense"?"#fff":"#0d2b1e";
-      renderCats();renderAmount();updateSave();
+      renderCats();renderAmount();updateSave();updateNotePlaceholder();
     };
   });
 
@@ -730,11 +754,14 @@
     else if(e.key==="Enter"){if(!saveBtn.disabled){saveBtn.click();e.preventDefault();}}
   });
 
-  noteInput.oninput=function(){draft.note=noteInput.value;};
+  noteInput.oninput=function(){draft.note=noteInput.value;updateNotePlaceholder();};
   dateInput.onchange=function(){draft.date=dateInput.value||todayStr();};
 
   saveBtn.onclick=function(){
     if(saveBtn.disabled)return;
+    if(["lend","lend_back","borrow","debt_pay"].indexOf(draft.cat)>=0&&!draft.note.trim()){
+      toast("Укажите, кому или от кого");noteInput.focus();return;
+    }
     var newTx={id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account};
     txs.push(newTx);
     save();
@@ -850,6 +877,41 @@
     var bal=din-dout;
     var el=document.getElementById("depBalance");
     if(el){el.textContent=money(bal);el.style.color=bal<0?"var(--expense)":"var(--transfer)";}
+
+    // долги по людям: + мне должны, − я должен
+    var people={};
+    txs.forEach(function(t){
+      if(!isDebt(t))return;
+      var who=(t.note||"").trim()||"Без имени";
+      if(!people[who])people[who]=0;
+      if(t.cat==="lend")people[who]+=t.amount;        // дал в долг → мне должны
+      if(t.cat==="lend_back")people[who]-=t.amount;   // вернули → долг гасится
+      if(t.cat==="borrow")people[who]-=t.amount;      // взял → я должен
+      if(t.cat==="debt_pay")people[who]+=t.amount;    // вернул → мой долг гасится
+    });
+    var rows=Object.keys(people).filter(function(k){return Math.round(people[k])!==0;})
+      .map(function(k){return {who:k,sum:people[k]};})
+      .sort(function(a,b){return Math.abs(b.sum)-Math.abs(a.sum);});
+
+    var owed=0,owe=0;
+    rows.forEach(function(r){if(r.sum>0)owed+=r.sum;else owe+=-r.sum;});
+    var sumEl=document.getElementById("debtSummary");
+    var listEl=document.getElementById("debtList");
+    if(sumEl){
+      if(!rows.length)sumEl.textContent="Нет активных долгов";
+      else{
+        var parts=[];
+        if(owed)parts.push("вам должны "+money(owed));
+        if(owe)parts.push("вы должны "+money(owe));
+        sumEl.textContent=parts.join(" · ");
+      }
+    }
+    if(listEl){
+      listEl.innerHTML=rows.map(function(r){
+        var pos=r.sum>0;
+        return '<div class="debt-row"><div><div class="who">'+escapeHtml(r.who)+'</div><div class="dir">'+(pos?"должен вам":"вы должны")+'</div></div><div class="sum num '+(pos?"owed":"owe")+'">'+money(Math.abs(r.sum))+'</div></div>';
+      }).join("");
+    }
   }
 
   // tabs
