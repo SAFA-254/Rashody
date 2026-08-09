@@ -82,9 +82,9 @@
   .cat:active{transform:scale(.96)}
 
   .acct-block{display:flex;align-items:center;gap:10px;margin:6px 0 14px;flex-wrap:wrap}
-  .acct-lbl{color:var(--muted);font-size:13px}
+  .acct-lbl{color:var(--muted);font-size:13px;flex-shrink:0}
   .accts{display:flex;gap:8px;flex-wrap:wrap}
-  .acct{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;transition:.12s}
+  .acct{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:6px;transition:.12s}
   .acct .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
   .acct.sel{color:var(--text);background:var(--surface-2)}
   .acct:active{transform:scale(.97)}
@@ -185,7 +185,7 @@
   .month-nav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
   .month-nav button{background:var(--surface);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:18px;transition:.12s}
   .month-nav .m{font-size:16px;font-weight:600}
-  .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:16px}
   .summary .card{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 12px}
   .summary .card .lbl{font-size:12px;color:var(--muted)}
   .summary .card .amt{font-size:clamp(15px,4.6vw,20px);font-weight:700;margin-top:3px;white-space:nowrap}
@@ -322,9 +322,8 @@
     #s-more .set-group:nth-of-type(4){grid-area:g4}
     #s-more .set-note{grid-area:note;max-width:560px}
 
-    .summary{grid-template-columns:repeat(4,1fr)}
     .summary .card{padding:16px 18px}
-    .summary .card .amt{font-size:24px}
+    .summary .card .amt{font-size:22px}
     .tx{padding:13px 15px}
     .tx:hover{border-color:var(--muted);background:var(--surface-2)}
     .month-nav button:hover,.set-item button:hover{background:var(--surface-2);border-color:var(--muted)}
@@ -426,7 +425,8 @@
       <div class="summary">
         <div class="card exp"><div class="lbl">Расходы</div><div class="amt num" id="sumExp">0 ₸</div></div>
         <div class="card dep"><div class="lbl">Депозит</div><div class="amt num" id="sumDep">0 ₸</div></div>
-        <div class="card debt"><div class="lbl">Долги</div><div class="amt num" id="sumDebt">0 ₸</div></div>
+        <div class="card lent"><div class="lbl">Дал в долг</div><div class="amt num" id="sumLent">0 ₸</div></div>
+        <div class="card borrowed"><div class="lbl">Взял в долг</div><div class="amt num" id="sumBorrow">0 ₸</div></div>
         <div class="card inc"><div class="lbl">Доходы</div><div class="amt num" id="sumInc">0 ₸</div></div>
       </div>
       <div id="txList"></div>
@@ -724,6 +724,12 @@
     return {rows:rows,owed:owed,owe:owe,net:owed-owe};
   }
 
+  function setCardSub(amtEl,text){
+    var card=amtEl.parentNode,sub=card.querySelector(".sub");
+    if(!sub){sub=document.createElement("div");sub.className="sub";card.appendChild(sub);}
+    sub.textContent=text;
+  }
+
   function daysUntil(dstr){
     var d=new Date(dstr+"T00:00:00");
     var n=new Date();n.setHours(0,0,0,0);
@@ -896,14 +902,17 @@
     sumDep.textContent=(depNet>0?"+":depNet<0?"−":"")+fmt(Math.abs(depNet))+" ₸";
     sumDep.style.color=depNet<0?"var(--expense)":"var(--transfer)";
     var ds=debtSummary();
-    var sd=document.getElementById("sumDebt");
-    if(sd){
-      sd.textContent=(ds.net>0?"+":ds.net<0?"−":"")+fmt(Math.abs(ds.net))+" ₸";
-      sd.style.color=ds.net<0?"var(--expense)":ds.net>0?"var(--income)":"var(--muted)";
-      var card=sd.parentNode,sub=card.querySelector(".sub");
-      if(!sub){sub=document.createElement("div");sub.className="sub";card.appendChild(sub);}
-      sub.textContent=!ds.rows.length?"нет активных":
-        (ds.owed?"вам "+fmt(ds.owed):"")+(ds.owed&&ds.owe?" · ":"")+(ds.owe?"вы "+fmt(ds.owe):"");
+    var sl=document.getElementById("sumLent");
+    var sb=document.getElementById("sumBorrow");
+    if(sl){
+      sl.textContent=(ds.owed?"−":"")+fmt(ds.owed)+" ₸";
+      sl.style.color=ds.owed?"#7BC5F0":"var(--muted)";
+      setCardSub(sl,ds.owed?"вам вернут":"нет открытых");
+    }
+    if(sb){
+      sb.textContent=(ds.owe?"+":"")+fmt(ds.owe)+" ₸";
+      sb.style.color=ds.owe?"#7BC5F0":"var(--muted)";
+      setCardSub(sb,ds.owe?"нужно вернуть":"нет открытых");
     }
     renderReminders();
     if(!list.length){txList.innerHTML='<div class="empty"><div class="big">🗓️</div>Нет операций за этот месяц</div>';return;}
@@ -919,7 +928,8 @@
         var ac=acctById(t.account);
         var sub=[];if(ac)sub.push(ac.nm);if(t.note)sub.push(escapeHtml(t.note));
         var cls=isTransfer(t)?"tr":(t.type==="expense"?"e":"i");
-        var sign=isTransfer(t)?(t.cat==="deposit"?"→":"←"):(t.type==="expense"?"−":"+");
+        var out=["deposit","lend","debt_pay"].indexOf(t.cat)>=0;
+        var sign=isTransfer(t)?(out?"−":"+"):(t.type==="expense"?"−":"+");
         html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div>'+(sub.length?'<div class="n">'+sub.join(" · ")+'</div>':'')+'</div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
       });
       html+='</div>';
@@ -1105,7 +1115,8 @@
       sub.push(p2(d.getDate())+" "+MONTHS[d.getMonth()].toLowerCase().slice(0,3));
       if(t.note)sub.push(escapeHtml(t.note));
       var cls=isTransfer(t)?"tr":(t.type==="expense"?"e":"i");
-      var sign=isTransfer(t)?(t.cat==="deposit"?"→":"←"):(t.type==="expense"?"−":"+");
+      var out=["deposit","lend","debt_pay"].indexOf(t.cat)>=0;
+      var sign=isTransfer(t)?(out?"−":"+"):(t.type==="expense"?"−":"+");
       html+='<div class="tx" data-id="'+t.id+'"><div class="emo">'+c.emo+'</div><div class="info"><div class="t">'+c.nm+'</div><div class="n">'+sub.join(" · ")+'</div></div><div class="a '+cls+' num">'+sign+fmt(t.amount)+' ₸</div></div>';
     });
     recentList.innerHTML=html;
