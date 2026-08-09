@@ -142,6 +142,19 @@
     .modal-cats{grid-template-columns:repeat(5,1fr)}
   }
 
+  .due-row{display:none}
+  .due-row.on{display:flex}
+  .due-clear{background:none;border:none;color:var(--muted);font-size:13px;padding:6px}
+  .reminder{display:none;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.5}
+  .reminder.on{display:block}
+  .reminder.late{border-left-color:var(--expense)}
+  .reminder b{font-weight:700}
+  .reminder .r-line{margin-top:5px;color:var(--muted)}
+  .reminder .r-line.late{color:var(--expense)}
+  .debt-row .due{font-size:11px;margin-top:2px;color:var(--muted)}
+  .debt-row .due.late{color:var(--expense);font-weight:600}
+  .debt-row .due.soon{color:var(--gold)}
+
   .debt-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);gap:12px}
   .debt-row .who{font-size:14px;font-weight:600}
   .debt-row .dir{font-size:11px;color:var(--muted);margin-top:2px}
@@ -167,10 +180,11 @@
   .month-nav{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
   .month-nav button{background:var(--surface);border:1px solid var(--line);border-radius:10px;width:38px;height:38px;font-size:18px;transition:.12s}
   .month-nav .m{font-size:16px;font-weight:600}
-  .summary{display:flex;gap:10px;margin-bottom:16px}
-  .summary .card{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 12px}
+  .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  .summary .card{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 12px}
   .summary .card .lbl{font-size:12px;color:var(--muted)}
   .summary .card .amt{font-size:clamp(15px,4.6vw,20px);font-weight:700;margin-top:3px;white-space:nowrap}
+  .summary .card .sub{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .summary .exp .amt{color:var(--expense)}
   .summary .dep .amt{color:var(--transfer)}
   .summary .inc .amt{color:var(--income)}
@@ -302,6 +316,7 @@
     #s-more .set-group:nth-of-type(4){grid-area:g4}
     #s-more .set-note{grid-area:note;max-width:560px}
 
+    .summary{grid-template-columns:repeat(4,1fr)}
     .summary .card{padding:16px 18px}
     .summary .card .amt{font-size:24px}
     .tx{padding:13px 15px}
@@ -364,6 +379,7 @@
     <section id="s-add" class="screen active">
       <div class="head"><h1>Добавить</h1><div class="sub" id="add-sub">Новая запись</div></div>
       <div class="dash-stats" id="dashStats"></div>
+      <div class="reminder" id="remindAdd"></div>
       <div class="toggle" id="typeToggle">
         <button data-type="expense" class="on-exp">Расход</button>
         <button data-type="income">Доход</button>
@@ -378,6 +394,7 @@
         <input type="text" id="noteInput" placeholder="Комментарий (необязательно)" maxlength="60">
       </div>
       <div class="date-row"><span>Дата</span><input type="date" id="dateInput"></div>
+      <div class="date-row due-row" id="dueRow"><span>Вернуть до</span><input type="date" id="dueInput"><button class="due-clear" id="dueClear">✕</button></div>
       <div class="keypad" id="keypad">
         <button>1</button><button>2</button><button>3</button>
         <button>4</button><button>5</button><button>6</button>
@@ -394,6 +411,7 @@
     <!-- ===== HISTORY ===== -->
     <section id="s-hist" class="screen">
       <div class="head"><h1>История</h1><div class="sub">Все операции по месяцам</div></div>
+      <div class="reminder" id="remindHist"></div>
       <div class="month-nav">
         <button id="prevM">‹</button>
         <div class="m num" id="curMonth"></div>
@@ -402,6 +420,7 @@
       <div class="summary">
         <div class="card exp"><div class="lbl">Расходы</div><div class="amt num" id="sumExp">0 ₸</div></div>
         <div class="card dep"><div class="lbl">Депозит</div><div class="amt num" id="sumDep">0 ₸</div></div>
+        <div class="card debt"><div class="lbl">Долги</div><div class="amt num" id="sumDebt">0 ₸</div></div>
         <div class="card inc"><div class="lbl">Доходы</div><div class="amt num" id="sumInc">0 ₸</div></div>
       </div>
       <div id="txList"></div>
@@ -476,6 +495,10 @@
     <input type="text" id="editNote" class="fld" maxlength="60" placeholder="Необязательно">
     <label class="fld-lbl">Дата</label>
     <input type="date" id="editDate" class="fld">
+    <div id="editDueWrap" style="display:none">
+      <label class="fld-lbl">Вернуть до</label>
+      <input type="date" id="editDue" class="fld">
+    </div>
     <div class="modal-actions">
       <button class="modal-del" id="editDelete">Удалить</button>
       <button class="modal-save" id="editSave">Сохранить</button>
@@ -549,7 +572,7 @@
 
   // push one record (upsert)
   function pushTx(t){
-    var row={id:t.id,type:t.type,amount:t.amount,cat:t.cat,account:t.account||null,note:t.note||"",date:t.date};
+    var row={id:t.id,type:t.type,amount:t.amount,cat:t.cat,account:t.account||null,note:t.note||"",date:t.date,due:t.due||null};
     return sbCall("/rest/v1/transactions",{
       method:"POST",
       headers:{"Prefer":"resolution=merge-duplicates"},
@@ -588,7 +611,7 @@
       .then(function(rows){
         if(!Array.isArray(rows))return;
         var remote=rows.map(function(r){
-          return {id:r.id,type:r.type,amount:Number(r.amount),cat:r.cat,account:r.account||"kaspi",note:r.note||"",date:r.date};
+          return {id:r.id,type:r.type,amount:Number(r.amount),cat:r.cat,account:r.account||"kaspi",note:r.note||"",date:r.date,due:r.due||null};
         });
         var byId={};
         remote.forEach(function(t){byId[t.id]=t;});
@@ -662,8 +685,74 @@
   function isTransfer(t){return TRANSFER_CATS.indexOf(t.cat)>=0;}
   function isDebt(t){return ["lend","lend_back","borrow","debt_pay"].indexOf(t.cat)>=0;}
 
+  // сводка по долгам: баланс по людям + ближайший срок
+  function debtSummary(){
+    var people={};
+    txs.forEach(function(t){
+      if(!isDebt(t))return;
+      var who=(t.note||"").trim()||"Без имени";
+      if(!people[who])people[who]={sum:0,dues:[]};
+      if(t.cat==="lend")people[who].sum+=t.amount;
+      if(t.cat==="lend_back")people[who].sum-=t.amount;
+      if(t.cat==="borrow")people[who].sum-=t.amount;
+      if(t.cat==="debt_pay")people[who].sum+=t.amount;
+      if(t.due&&(t.cat==="lend"||t.cat==="borrow"))people[who].dues.push(t.due);
+    });
+    var rows=[];
+    Object.keys(people).forEach(function(k){
+      var p=people[k];
+      if(Math.round(p.sum)===0)return;
+      p.dues.sort();
+      rows.push({who:k,sum:p.sum,due:p.dues.length?p.dues[0]:null});
+    });
+    rows.sort(function(a,b){
+      if(a.due&&b.due)return a.due<b.due?-1:1;
+      if(a.due)return -1;
+      if(b.due)return 1;
+      return Math.abs(b.sum)-Math.abs(a.sum);
+    });
+    var owed=0,owe=0;
+    rows.forEach(function(r){if(r.sum>0)owed+=r.sum;else owe+=-r.sum;});
+    return {rows:rows,owed:owed,owe:owe,net:owed-owe};
+  }
+
+  function daysUntil(dstr){
+    var d=new Date(dstr+"T00:00:00");
+    var n=new Date();n.setHours(0,0,0,0);
+    return Math.round((d-n)/86400000);
+  }
+  function dueLabel(dstr){
+    var n=daysUntil(dstr);
+    if(n<0)return {text:"просрочен на "+Math.abs(n)+" дн.",cls:"late"};
+    if(n===0)return {text:"вернуть сегодня",cls:"late"};
+    if(n===1)return {text:"вернуть завтра",cls:"soon"};
+    if(n<=7)return {text:"вернуть через "+n+" дн.",cls:"soon"};
+    var d=new Date(dstr+"T00:00:00");
+    return {text:"до "+p2(d.getDate())+" "+MONTHS[d.getMonth()].toLowerCase().slice(0,3),cls:""};
+  }
+
+  function renderReminders(){
+    var s=debtSummary();
+    var soon=s.rows.filter(function(r){return r.due&&daysUntil(r.due)<=7;});
+    var html="",late=false;
+    if(soon.length){
+      html='<b>Напоминание по долгам</b>';
+      soon.forEach(function(r){
+        var l=dueLabel(r.due);
+        if(l.cls==="late")late=true;
+        html+='<div class="r-line '+(l.cls==="late"?"late":"")+'">'+escapeHtml(r.who)+' — '+(r.sum>0?"должен вам ":"вы должны ")+money(Math.abs(r.sum))+', '+l.text+'</div>';
+      });
+    }
+    ["remindAdd","remindHist"].forEach(function(id){
+      var el=document.getElementById(id);
+      if(!el)return;
+      el.innerHTML=html;
+      el.className="reminder"+(html?" on":"")+(late?" late":"");
+    });
+  }
+
   var txs=load();
-  var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr(),account:"kaspi"};
+  var draft={type:"expense",amount:0,cat:null,note:"",date:todayStr(),account:"kaspi",due:""};
   var viewMonth=new Date();viewMonth.setDate(1);
 
   function todayStr(){var d=new Date();return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());}
@@ -699,6 +788,10 @@
     var isD=["lend","lend_back","borrow","debt_pay"].indexOf(draft.cat)>=0;
     noteInput.placeholder=isD?"Кому / от кого (обязательно)":"Комментарий (необязательно)";
     noteInput.style.borderColor=isD&&!noteInput.value.trim()?"var(--gold)":"";
+    var dr=document.getElementById("dueRow");
+    var showDue=(draft.cat==="lend"||draft.cat==="borrow");
+    if(dr)dr.className="date-row due-row"+(showDue?" on":"");
+    if(!showDue)draft.due="";
   }
   function renderAmount(){
     var z=draft.amount===0;
@@ -756,18 +849,21 @@
 
   noteInput.oninput=function(){draft.note=noteInput.value;updateNotePlaceholder();};
   dateInput.onchange=function(){draft.date=dateInput.value||todayStr();};
+  var dueInput=document.getElementById("dueInput");
+  dueInput.onchange=function(){draft.due=dueInput.value||"";};
+  document.getElementById("dueClear").onclick=function(){dueInput.value="";draft.due="";};
 
   saveBtn.onclick=function(){
     if(saveBtn.disabled)return;
     if(["lend","lend_back","borrow","debt_pay"].indexOf(draft.cat)>=0&&!draft.note.trim()){
       toast("Укажите, кому или от кого");noteInput.focus();return;
     }
-    var newTx={id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account};
+    var newTx={id:uid(),type:draft.type,amount:draft.amount,cat:draft.cat,note:draft.note.trim(),date:draft.date,account:draft.account,due:draft.due||null};
     txs.push(newTx);
     save();
     if(session){pushTx(newTx).then(function(){setSync("ok");}).catch(function(){enqueue("put",newTx);});}
     toast(draft.type==="expense"?"Расход добавлен":"Доход добавлен");
-    draft.amount=0;draft.note="";draft.cat=null;noteInput.value="";
+    draft.amount=0;draft.note="";draft.cat=null;draft.due="";noteInput.value="";dueInput.value="";
     renderCats();renderAmount();updateSave();renderDash();
   };
 
@@ -791,6 +887,17 @@
     sumExp.textContent=money(e);sumInc.textContent=money(i);
     sumDep.textContent=(depNet>0?"+":depNet<0?"−":"")+fmt(Math.abs(depNet))+" ₸";
     sumDep.style.color=depNet<0?"var(--expense)":"var(--transfer)";
+    var ds=debtSummary();
+    var sd=document.getElementById("sumDebt");
+    if(sd){
+      sd.textContent=(ds.net>0?"+":ds.net<0?"−":"")+fmt(Math.abs(ds.net))+" ₸";
+      sd.style.color=ds.net<0?"var(--expense)":ds.net>0?"var(--income)":"var(--muted)";
+      var card=sd.parentNode,sub=card.querySelector(".sub");
+      if(!sub){sub=document.createElement("div");sub.className="sub";card.appendChild(sub);}
+      sub.textContent=!ds.rows.length?"нет активных":
+        (ds.owed?"вам "+fmt(ds.owed):"")+(ds.owed&&ds.owe?" · ":"")+(ds.owe?"вы "+fmt(ds.owe):"");
+    }
+    renderReminders();
     if(!list.length){txList.innerHTML='<div class="empty"><div class="big">🗓️</div>Нет операций за этот месяц</div>';return;}
     var groups={},order=[];
     list.forEach(function(t){if(!groups[t.date]){groups[t.date]=[];order.push(t.date);}groups[t.date].push(t);});
@@ -878,40 +985,28 @@
     var el=document.getElementById("depBalance");
     if(el){el.textContent=money(bal);el.style.color=bal<0?"var(--expense)":"var(--transfer)";}
 
-    // долги по людям: + мне должны, − я должен
-    var people={};
-    txs.forEach(function(t){
-      if(!isDebt(t))return;
-      var who=(t.note||"").trim()||"Без имени";
-      if(!people[who])people[who]=0;
-      if(t.cat==="lend")people[who]+=t.amount;        // дал в долг → мне должны
-      if(t.cat==="lend_back")people[who]-=t.amount;   // вернули → долг гасится
-      if(t.cat==="borrow")people[who]-=t.amount;      // взял → я должен
-      if(t.cat==="debt_pay")people[who]+=t.amount;    // вернул → мой долг гасится
-    });
-    var rows=Object.keys(people).filter(function(k){return Math.round(people[k])!==0;})
-      .map(function(k){return {who:k,sum:people[k]};})
-      .sort(function(a,b){return Math.abs(b.sum)-Math.abs(a.sum);});
-
-    var owed=0,owe=0;
-    rows.forEach(function(r){if(r.sum>0)owed+=r.sum;else owe+=-r.sum;});
+    // долги
+    var s=debtSummary();
     var sumEl=document.getElementById("debtSummary");
     var listEl=document.getElementById("debtList");
     if(sumEl){
-      if(!rows.length)sumEl.textContent="Нет активных долгов";
+      if(!s.rows.length)sumEl.textContent="Нет активных долгов";
       else{
         var parts=[];
-        if(owed)parts.push("вам должны "+money(owed));
-        if(owe)parts.push("вы должны "+money(owe));
+        if(s.owed)parts.push("вам должны "+money(s.owed));
+        if(s.owe)parts.push("вы должны "+money(s.owe));
         sumEl.textContent=parts.join(" · ");
       }
     }
     if(listEl){
-      listEl.innerHTML=rows.map(function(r){
+      listEl.innerHTML=s.rows.map(function(r){
         var pos=r.sum>0;
-        return '<div class="debt-row"><div><div class="who">'+escapeHtml(r.who)+'</div><div class="dir">'+(pos?"должен вам":"вы должны")+'</div></div><div class="sum num '+(pos?"owed":"owe")+'">'+money(Math.abs(r.sum))+'</div></div>';
+        var due="";
+        if(r.due){var l=dueLabel(r.due);due='<div class="due '+l.cls+'">'+l.text+'</div>';}
+        return '<div class="debt-row"><div><div class="who">'+escapeHtml(r.who)+'</div><div class="dir">'+(pos?"должен вам":"вы должны")+'</div>'+due+'</div><div class="sum num '+(pos?"owed":"owe")+'">'+money(Math.abs(r.sum))+'</div></div>';
       }).join("");
     }
+    renderReminders();
   }
 
   // tabs
@@ -998,7 +1093,7 @@
       var b=document.createElement("button");
       b.className="cat"+(edit.cat===c.id?" sel":"");
       b.innerHTML='<span class="emo">'+c.emo+'</span><span class="nm">'+c.nm+'</span>';
-      b.onclick=function(){edit.cat=c.id;renderEditCats();};
+      b.onclick=function(){edit.cat=c.id;renderEditCats();toggleEditDue();};
       editCats.appendChild(b);
     });
   }
@@ -1021,6 +1116,10 @@
     };
   });
 
+  function toggleEditDue(){
+    var w=document.getElementById("editDueWrap");
+    if(w)w.style.display=(edit.cat==="lend"||edit.cat==="borrow")?"block":"none";
+  }
   function openEdit(id){
     var t=null;
     for(var i=0;i<txs.length;i++)if(txs[i].id===id){t=txs[i];break;}
@@ -1029,10 +1128,11 @@
     editAmount.value=t.amount;
     editNote.value=t.note||"";
     editDate.value=t.date;
+    document.getElementById("editDue").value=t.due||"";
     editToggle.querySelectorAll("button").forEach(function(x){
       x.className=(x.dataset.type===edit.type)?(edit.type==="expense"?"on-exp":"on-inc"):"";
     });
-    renderEditCats();renderEditAccts();
+    renderEditCats();renderEditAccts();toggleEditDue();
     editModal.classList.add("open");
   }
   function closeEdit(){editModal.classList.remove("open");edit.id=null;}
@@ -1050,6 +1150,8 @@
         txs[i].type=edit.type;txs[i].amount=amt;txs[i].cat=edit.cat;
         txs[i].account=edit.account;txs[i].note=editNote.value.trim();
         txs[i].date=editDate.value||txs[i].date;
+        var dv=document.getElementById("editDue").value;
+        txs[i].due=(edit.cat==="lend"||edit.cat==="borrow")&&dv?dv:null;
         var upd=txs[i];
         save();
         if(session){pushTx(upd).then(function(){setSync("ok");}).catch(function(){enqueue("put",upd);});}
