@@ -154,6 +154,11 @@
   .debt-row .due.soon{color:var(--gold)}
 
   .debt-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);gap:12px}
+  .debt-row .dinfo{min-width:0}
+  .debt-row .dright{display:flex;align-items:center;gap:12px;flex-shrink:0}
+  .repay{background:var(--surface-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap;transition:.12s}
+  .repay:hover{border-color:var(--gold);color:var(--gold)}
+  .repay:active{transform:scale(.96)}
   .debt-row .who{font-size:14px;font-weight:600}
   .debt-row .dir{font-size:11px;color:var(--muted);margin-top:2px}
   .debt-row .sum{font-size:15px;font-weight:700;white-space:nowrap}
@@ -975,6 +980,30 @@
     if(confirm("Удалить ВСЕ операции? Это действие нельзя отменить.")){if(confirm("Точно удалить всё? Сначала лучше сделать экспорт.")){txs=[];save();refreshAll();toast("Все данные удалены");}}
   };
   function downloadBlob(blob,name){var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},100);}
+  // быстрое погашение долга из списка
+  function prefillRepay(who,amount,theyOweYou){
+    draft.type=theyOweYou?"income":"expense";
+    draft.cat=theyOweYou?"lend_back":"debt_pay";
+    draft.amount=Math.round(amount);
+    draft.note=who;
+    draft.date=todayStr();
+    draft.due="";
+    // синхронизируем интерфейс
+    toggle.querySelectorAll("button").forEach(function(x){
+      x.className=(x.dataset.type===draft.type)?(draft.type==="expense"?"on-exp":"on-inc"):"";
+    });
+    addSub.textContent=draft.type==="expense"?"Новый расход":"Новый доход";
+    saveBtn.style.background=draft.type==="expense"?"var(--grape)":"var(--income)";
+    saveBtn.style.color=draft.type==="expense"?"#fff":"#0d2b1e";
+    noteInput.value=who;
+    dateInput.value=draft.date;
+    renderCats();renderAmount();updateSave();updateNotePlaceholder();
+    // переходим на экран добавления
+    var addTab=document.querySelector('.tabbar button[data-tab="add"]');
+    if(addTab)addTab.click();
+    toast(theyOweYou?"Проверьте сумму возврата":"Проверьте сумму платежа");
+  }
+
   function renderMore(){
     document.getElementById("txCount").textContent=txs.length+" оп.";
     var din=0,dout=0;
@@ -1004,8 +1033,13 @@
         var pos=r.sum>0;
         var due="";
         if(r.due){var l=dueLabel(r.due);due='<div class="due '+l.cls+'">'+l.text+'</div>';}
-        return '<div class="debt-row"><div><div class="who">'+escapeHtml(r.who)+'</div><div class="dir">'+(pos?"должен вам":"вы должны")+'</div>'+due+'</div><div class="sum num '+(pos?"owed":"owe")+'">'+money(Math.abs(r.sum))+'</div></div>';
+        return '<div class="debt-row"><div class="dinfo"><div class="who">'+escapeHtml(r.who)+'</div><div class="dir">'+(pos?"должен вам":"вы должны")+'</div>'+due+'</div><div class="dright"><div class="sum num '+(pos?"owed":"owe")+'">'+money(Math.abs(r.sum))+'</div><button class="repay" data-who="'+escapeHtml(r.who)+'" data-sum="'+Math.abs(r.sum)+'" data-pos="'+(pos?"1":"0")+'">'+(pos?"Вернули":"Вернуть")+'</button></div></div>';
       }).join("");
+      listEl.querySelectorAll(".repay").forEach(function(b){
+        b.onclick=function(){
+          prefillRepay(b.dataset.who,Number(b.dataset.sum),b.dataset.pos==="1");
+        };
+      });
     }
     renderReminders();
   }
