@@ -528,6 +528,7 @@
       </div>
       <div class="set-group">
         <div class="set-item"><div class="l"><div class="t">Всего операций</div><div class="d" id="txCount">0</div></div></div>
+        <div class="set-item"><div class="l"><div class="t">Версия приложения</div><div class="d" id="verInfo">—</div></div><button id="updateBtn">Обновить</button></div>
         <div class="set-item"><div class="l"><div class="t">Очистить всё</div><div class="d">Удалить все записи без возврата</div></div><button class="danger" id="clearBtn">Удалить</button></div>
       </div>
       <div class="set-note">Данные хранятся только в этом браузере. Делай экспорт время от времени, чтобы не потерять историю при чистке браузера или смене устройства.</div>
@@ -580,6 +581,7 @@
 (function(){
   "use strict";
   var KEY="rashody_v1";
+  var APP_VERSION="2026-08-09 18:09";
 
   /* ================= SUPABASE ================= */
   var SB_URL="https://ihqdsemaymyhobphcyju.supabase.co";
@@ -1172,6 +1174,17 @@
     r.onload=function(){try{var obj=JSON.parse(r.result);var data=Array.isArray(obj)?obj:obj.data;if(!Array.isArray(data))throw 0;if(confirm("Заменить текущие данные ("+txs.length+" оп.) на импортированные ("+data.length+" оп.)?")){txs=data;save();refreshAll();toast("Импортировано: "+data.length);}}catch(err){toast("Не удалось прочитать файл");}e.target.value="";};
     r.readAsText(f);
   };
+  var vi=document.getElementById("verInfo");
+  if(vi)vi.textContent="от "+APP_VERSION;
+  document.getElementById("updateBtn").onclick=function(){
+    toast("Проверяю обновления…");
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.getRegistration().then(function(r){
+        if(r){ if(r.active)r.active.postMessage("refresh-shell"); r.update(); }
+        setTimeout(function(){location.reload();},900);
+      }).catch(function(){location.reload();});
+    }else location.reload();
+  };
   document.getElementById("clearBtn").onclick=function(){
     if(confirm("Удалить ВСЕ операции? Это действие нельзя отменить.")){if(confirm("Точно удалить всё? Сначала лучше сделать экспорт.")){txs=[];save();refreshAll();toast("Все данные удалены");}}
   };
@@ -1585,57 +1598,4 @@
       session=j;saveSess(session);
       loginBtn.disabled=false;loginBtn.textContent="Войти";
       passIn.value="";
-      afterLogin();
-    }).catch(function(err){
-      loginBtn.disabled=false;loginBtn.textContent="Войти";
-      loginErr.textContent=(""+err.message).indexOf("credential")>=0?"Неверный email или пароль":err.message;
-    });
-  }
-  loginBtn.onclick=doLogin;
-  passIn.onkeydown=function(e){if(e.key==="Enter")doLogin();};
-  emailIn.onkeydown=function(e){if(e.key==="Enter")passIn.focus();};
-
-  document.getElementById("offlineBtn").onclick=function(){
-    loginScreen.classList.add("hidden");
-    setSync("off","Выключена — данные только на этом устройстве");
-    refreshAll();
-  };
-
-  document.getElementById("syncBtn").onclick=function(){
-    if(!session){toast("Сначала войдите");loginScreen.classList.remove("hidden");return;}
-    toast("Синхронизация…");
-    flushQueue().then(pullAll).then(function(){toast("Готово");});
-  };
-  document.getElementById("logoutBtn").onclick=function(){
-    if(!session){loginScreen.classList.remove("hidden");return;}
-    if(confirm("Выйти из аккаунта? Записи останутся на этом устройстве.")){
-      session=null;saveSess(null);
-      document.getElementById("acctInfo").textContent="Не выполнен вход";
-      setSync("off");
-      loginScreen.classList.remove("hidden");
-    }
-  };
-
-  // auto-flush when connection returns
-  window.addEventListener("online",function(){if(session)flushQueue().then(pullAll);});
-
-  /* ---------- startup ---------- */
-  session=loadSess();
-  if("serviceWorker" in navigator){
-    window.addEventListener("load",function(){
-      navigator.serviceWorker.register("sw.js").catch(function(){});
-    });
-  }
-  if(session){
-    loginScreen.classList.add("hidden");
-    var ai=document.getElementById("acctInfo");
-    if(ai&&session.user)ai.textContent=session.user.email;
-    setSync("ok");
-    flushQueue().then(pullAll).then(pullSettings).then(function(){refreshAfterSettings();renderTemplates();});
-  }else{
-    setSync("off");
-  }
-})();
-</script>
-</body>
-</html>
+      a
